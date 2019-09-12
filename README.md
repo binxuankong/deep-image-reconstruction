@@ -27,8 +27,6 @@ This project is created in partial fulfillment of the requirements for the MSc d
 pip install -r requirements.txt
 ```
 
-### Autoencoders for image features
+### Brain activity decoding
 
-### CNN feature decoding from brain activity
-
-### Image reconstructions from decoded CNN features
+### Image reconstructions from decoded features

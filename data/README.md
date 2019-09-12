@@ -1,4 +1,5 @@
-# Deep Image Reconstruction from Human Brain Activity: Data
+# Deep Image Reconstruction from Human Brain Activity
+## Data
 
 The data required to run the program will be available soon. The files should be saved in the respective directories as follows.
 
