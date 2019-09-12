@@ -81,4 +81,3 @@ def get_averaged_feature(pred_y, true_y, labels):
 
     return pred_y_av, true_y_av, labels_set
 
-

@@ -6,9 +6,9 @@ from PIL import Image
 
 
 # Image directory
-img_dir = '../../pan_data/image/all_class/'
-# Target directory
-target_dir = '../data/features/'
+img_dir = '../data/images/'
+# Image features directory
+target_dir = '../data/img_features/'
 
 cnn_layers = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2', 'conv3_1', 'conv3_2', 'conv3_3',
               'conv3_4', 'conv4_1', 'conv4_2', 'conv4_3', 'conv4_4', 'conv5_1', 'conv5_2',
@@ -80,6 +80,4 @@ for cnn_layer in cnn_layers:
         filename = class_dir + 'vgg19_' + cnn_layer + '.p'
         print('Dumping {} feature dictionary to {}...'.format(cnn_layer, filename))
         pickle.dump(class_dict, open(filename, 'wb'))
-
-
 

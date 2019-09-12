@@ -3,9 +3,11 @@ from autoencoder_model import *
 
 
 # Image features directory
-feat_dir = '../data/features/'
-# Target directory
-target_dir = '../data/encoded/'
+feat_dir = '../data/img_features/'
+# Trained models directory
+model_dir = '../data/trained_models'
+# Encoded features directory
+target_dir = '../data/encoded_features/'
 
 cnn_layers = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2', 'conv3_1', 'conv3_2', 'conv3_3',
               'conv3_4', 'conv4_1', 'conv4_2', 'conv4_3', 'conv4_4', 'conv5_1', 'conv5_2',
@@ -17,13 +19,13 @@ classes = ['bag', 'bulb', 'candle', 'cup', 'heels', 'jelly_fish', 'lamp', 'leaf'
 
 # GPU configurations
 use_gpu = False
-gpu_id = 0
+gpu_id = 1
 if torch.cuda.is_available():
     use_gpu = True
 
 encoded_dict = {}
 
-# Mean and standard deviation of each layer
+# Mean and standard devation feature layers of images
 mean_file = target_dir + 'mean_std.p'
 norm_dict = pickle.load(open(mean_file, 'rb'))
 
@@ -44,15 +46,11 @@ for layer in cnn_layers:
         model = fc_autoencoder()
 
     # Load trained model
-    modelfile = target_dir + 'models/vgg19_' + layer + '_n4.pth'
+    modelfile = model_dir + 'models/vgg19_' + layer + '.pth'
     model.load_state_dict(torch.load(modelfile))
     if use_gpu:
         model = model.cuda(gpu_id)
     model.eval()
-
-    filename = target_dir + 'vgg19_' + layer +'_n4.p'
-    print('Opening {} encoded dictionary {}...'.format(layer, filename))
-    encoded_dict = pickle.load(open(filename, 'rb'))
 
     mean = norm_dict[layer]['mean']
     std = norm_dict[layer]['std']
@@ -66,7 +64,7 @@ for layer in cnn_layers:
         for i in range(len(class_dict)):
             key = list(class_dict.keys())[i]
             feat = list(class_dict.values())[i]
-            # De-normalize the features
+            # Normalize features
             feat = (feat - mean) / std
             if use_gpu:
                 feat = feat.cuda(gpu_id)
@@ -75,8 +73,7 @@ for layer in cnn_layers:
 
     # Save to dictionary
     print('Dictionary size: {}'.format(len(encoded_dict)))
-    filename = target_dir + 'vgg19_' + layer +'_n4.p'
+    filename = target_dir + 'vgg19_' + layer +'.p'
     print('Dumping {} encoded dictionary to {}...'.format(layer, filename))
     pickle.dump(encoded_dict, open(filename, 'wb'))
-
 

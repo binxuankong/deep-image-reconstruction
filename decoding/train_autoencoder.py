@@ -1,4 +1,3 @@
-import sys
 import time
 import datetime
 import torch
@@ -6,14 +5,14 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-from dataset_image import *
+from dataset_image import FeatureDataset
 from autoencoder_model import *
 
 
 # Image features directory
-feat_dir = '../data/features/'
-# Target directory
-target_dir = '../data/encoded/'
+feat_dir = '../data/img_features/'
+# Trained models directory
+target_dir = '../data/trained_models/'
 
 cnn_layers = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2', 'conv3_1', 'conv3_2', 'conv3_3',
               'conv3_4', 'conv4_1', 'conv4_2', 'conv4_3', 'conv4_4', 'conv5_1', 'conv5_2',
@@ -28,7 +27,6 @@ num_epochs = 100
 batch_size = 32
 learning_rate = 5e-4
 print_interval = 5
-
 validation_split = 0.1
 shuffle_dataset = True
 random_seed = 42
@@ -40,7 +38,7 @@ gpu_id = 1
 if torch.cuda.is_available():
     use_gpu = True
 
-# Mean and standard devation of all images file
+# Mean and standard devation feature layers of images
 mean_file = target_dir + 'mean_std.p'
 norm_dict = pickle.load(open(mean_file, 'rb'))
 
@@ -51,6 +49,7 @@ for layer in cnn_layers:
     print('Loading data...')
     dataset = FeatureDataset(feat_dir, classes, layer, norm_dict)
 
+    # Split data into training and validation set
     dataset_size = len(dataset)
     indices = list(range(dataset_size))
     split = int(np.floor(validation_split * dataset_size))
@@ -65,8 +64,6 @@ for layer in cnn_layers:
     train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
     valid_loader = DataLoader(dataset, batch_size=batch_size, sampler=valid_sampler)
 
-    train_loader = DataLoader(dataset, batch_size=batch_size)
-
     if 'conv1' in layer:
         model = conv1_autoencoder()
     elif 'conv2' in layer:
@@ -80,6 +77,7 @@ for layer in cnn_layers:
     elif 'fc' in layer:
         model = fc_autoencoder()
 
+    # Loss function
     criterion = nn.MSELoss()
     if use_gpu:
         model = model.cuda(gpu_id)
@@ -141,8 +139,7 @@ for layer in cnn_layers:
                      str(time_left).split('.')[0]))
 
 
-    modelfile = target_dir + 'models/vgg19_' + layer + '_n4.pth'
+    modelfile = target_dir + 'models/vgg19_' + layer + '.pth'
     print('Saving model to {}...'.format(modelfile))
     torch.save(model.state_dict(), modelfile)
-
 

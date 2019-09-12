@@ -1,19 +1,10 @@
-import sys
-import time
-import datetime
 import torch
-import numpy as np
-
-from torch import nn
-from torch.utils.data import DataLoader
-from dataset_image import *
-from autoencoder_model import *
 
 
 # Image features directory
-feat_dir = '../data/features/'
+feat_dir = '../data/img_features/'
 # Target directory
-target_dir = '../data/encoded/'
+target_dir = '../data/encoded_features/'
 
 cnn_layers = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2', 'conv3_1', 'conv3_2', 'conv3_3',
               'conv3_4', 'conv4_1', 'conv4_2', 'conv4_3', 'conv4_4', 'conv5_1', 'conv5_2',
@@ -53,5 +44,4 @@ for layer in cnn_layers:
 filename = target_dir + 'mean_std.p'
 print('Dumping dictionary to {}...'.format(filename))
 pickle.dump(norm_dict, open(filename, 'wb'))
-
 

@@ -11,34 +11,6 @@ from scipy.ndimage import zoom
 from torchvision import datasets, models, transforms
 
 
-class ImageDataFolder(datasets.ImageFolder):
-    def __getitem__(self, index):
-        (img, label) = super(ImageDataFolder, self).__getitem__(index)
-        path = self.imgs[index][0]
-        img_filename = path.split('/')[-1]
-        img_id = img_filename.replace('.jpg', '')
-        return label, img_id
-
-
-class ImageDataset(Dataset):
-    def __init__(self, root_dir, cls, transform=None):
-        self.root_dir = root_dir
-        self.cls = cls
-        self.transform = transform
-        self.img_list = [img for img in os.listdir(root_dir + cls + '/')]
-
-    def __getitem__(self, index):
-        img_name = self.img_list[index]
-        img_id = img_name.replace('.jpg', '')
-        image = Image.open(img_name).convert('RGB')
-        if self.transform is not None:
-            image = self.transform(image)
-        return image, img_id
-
-    def __len__(self):
-        return len(self.img_list)
-
-
 # Load image features of layer
 class FeatureDataset(Dataset):
     def __init__(self, feat_dir, classes, layer, norm_dict):
@@ -68,37 +40,30 @@ class FeatureDataset(Dataset):
         return len(self.features)
 
 
-class ROIDataset(Dataset):
-    def __init__(self, roi_dict):
-        self.roi_dict = roi_dict
+# Load fMRI data
+class fMRIDataset(Dataset):
+    def __init__(self, fmri_dict):
+        self.fmri_dict = fmri_dict
 
     def __getitem__(self, index):
-        key_id = list(self.roi_dict)[index]
-        key_split = key_id.split('*')
-        cls = key_split[0]
-        cls_id = key_split[1]
-        fmri = self.roi_dict[key_id].astype('float32')
-
-        return fmri, cls, cls_id
+        key_id = list(self.fmri_dict)[index]
+        fmri = self.fmri_dict[key_id].astype('float32')
+        return fmri, key_id
 
     def __len__(self):
-        return len(self.roi_dict)
+        return len(self.fmri_dict)
 
 
+# Load EEG data
 class EEGDataset(Dataset):
     def __init__(self, eeg_dict):
         self.eeg_dict = eeg_dict
 
     def __getitem__(self, index):
         key_id = list(self.eeg_dict)[index]
-        key_split = key_id.split('*')
-        cls = key_split[0]
-        cls_id = key_split[1]
         fmri = self.eeg_dict[key_id].astype('float32')
-
-        return fmri, cls, cls_id
+        return fmri, key_id
 
     def __len__(self):
         return len(self.eeg_dict)
-
 
