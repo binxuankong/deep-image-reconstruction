@@ -1,11 +1,9 @@
-import os
 import pickle
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from torchvision import models, transforms
+from torchvision import models
 from torch.autograd import Variable
 from torch.optim import lr_scheduler
 from PIL import Image
@@ -14,21 +12,26 @@ from utils import *
 from fmri_decoding.autoencoder_model import *
 
 
-# img_dir = 'data/images/'
-img_dir = '../pan_data/image/all_class/'
-ae_dir = 'data/encoded/'
-feat_dir = 'data/features/'
-fmri_dir = 'data/fmris/'
-clss = 'sunflower'
-key = '401'
-img_size = 224
+# Encoded image features directory
+encoded_dir = 'data/encoded_features/'
+# Trained models directory
+models_dir = 'data/trained_models/'
+# Examples directory
+examples_dir = 'examples/'
 
-test_case = 'ae'
+
+# Class and id of image object to be reconstructed
+cls = 'heels'
+key = '644'
+key_id = cls + '*' + key
+
+# Training configurations
+img_size = 224
 num_epochs = 1000
 print_iter = 100
-save_iter = 500
+save_iter = 1000
 
-# GPU config
+# GPU configurations
 use_gpu = False
 gpu_id = 1
 if torch.cuda.is_available():
@@ -46,12 +49,14 @@ original_feats = []
 mean_file = ae_dir + 'mean_std.p'
 norm_dict = pickle.load(open(mean_file, 'rb'))
 
+# Load the image features for every layer
 for layer in cnn_layers:
-    encoded_file = ae_dir + 'vgg19_' + layer + '_n4.p'
+	# Load encoded image features for layer
+    encoded_file = encoded_dir + 'vgg19_' + layer + '.p'
     print('Loading encoded dictionary from {}...'.format(encoded_file))
     encoded_dict = pickle.load(open(encoded_file, 'rb'))
-    key_id = clss + '*' + key
     encoded_feat = encoded_dict[key_id]
+    # Features of fc8 are not encoded, so ignore
     if 'fc8' in layer:
         original_feat = encoded_feat
     else:
@@ -67,7 +72,8 @@ for layer in cnn_layers:
             decoder = conv5_autoencoder()
         elif 'fc' in layer:
             decoder = fc_autoencoder()
-        decoder_pth = ae_dir + 'models/vgg19_' + layer + '_n4.pth'
+        # Load trained decoder
+        decoder_pth = models_dir + 'models/vgg19_' + layer + '.pth'
         if use_gpu:
             decoder = decoder.cuda(gpu_id)
             encoded_feat = encoded_feat.cuda(gpu_id)
@@ -147,19 +153,11 @@ def get_total_loss(recon_img, output, target):
 
 
 # Reconstruct the image
-def reconstruct_image(image, img_size=224, test_case=1, num_epochs=200, print_iter=10, save_iter=50):
-    data_transform = transforms.Compose([
-        transforms.Resize((img_size, img_size), Image.BICUBIC),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
-    ])
-
-    img = data_transform(image).unsqueeze(0)
-
+def reconstruct_image(img_size=224, test_case=1, num_epochs=200, print_iter=10, save_iter=50):
+    # Load pre-trained VGG19 model to extract image features
     model = models.vgg19(pretrained=True)
     if use_gpu:
         model = model.cuda(gpu_id)
-
     model.eval()
 
     # Generate a random image which we will optimize
@@ -171,23 +169,11 @@ def reconstruct_image(image, img_size=224, test_case=1, num_epochs=200, print_it
     # Define optimizer for previously created image
     optimizer = optim.SGD([recon_img], lr=1e2, momentum=0.9)
 
-    # Get the features from the model of the original image
-    if use_gpu:
-        img = img.cuda(gpu_id)
-    img_features = get_features_from_layers(model, img)
-
-    # Show feature loss of saved features and original image
-    for i, layer in enumerate(cnn_layers):
-        x = img_features[i]
-        y = original_feats[i]
-        feat_loss = nn.MSELoss()
-        err = feat_loss(x, y).data.cpu().numpy()
-        print('Feature loss in layer {}: {}'.format(layer, err))
-
     # Decay learning rate by a factor of 0.1 every x epochs
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.1)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=200, gamma=0.1)
 
     for epoch in range(num_epochs):
+    	# Training
         scheduler.step()
         optimizer.zero_grad()
 
@@ -201,20 +187,19 @@ def reconstruct_image(image, img_size=224, test_case=1, num_epochs=200, print_it
         total_loss.backward()
         optimizer.step()
 
-        # Generate image every x iterations
+        # Print out losses every x iterations
         if (epoch+1) % print_iter == 0:
             print('Epoch %d:\tAlpha: %.6f\tTV: %.6f\tEuc: %.6f\tLoss: %.6f' % (epoch+1,
                 alpha_loss.data.cpu().numpy(), tv_loss.data.cpu().numpy(),
                 euc_loss.data.cpu().numpy(), total_loss.data.cpu().numpy()))
 
+        # Save the  image every x iterations
         if (epoch+1) % save_iter == 0:
             img_sample = torch.squeeze(recon_img.cpu())
-            im_path = clss + '_' + key + '_i' + str(epoch+1) + '_' + test_case + '.jpg'
+            im_path = examples_dir + cls + '_' + key + '_direct.jpg'
             save_image(img_sample, im_path, normalize=True)
 
 
-image_file = img_dir + clss + '/' + key + '.jpg'
-image = Image.open(image_file)
-
-reconstruct_image(image, test_case=test_case, num_epochs=num_epochs, print_iter=print_iter, save_iter=save_iter)
+# Call image reconstruction function
+reconstruct_image(test_case=test_case, num_epochs=num_epochs, print_iter=print_iter, save_iter=save_iter)
 
