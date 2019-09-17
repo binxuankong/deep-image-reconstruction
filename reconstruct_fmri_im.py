@@ -7,12 +7,13 @@ from torchvision import models
 from torch.autograd import Variable
 from torch.optim import lr_scheduler
 from torchvision.utils import save_image
+from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
 from utils import *
 from fmri_decoding.autoencoder_model import *
 
 
-# Encoded image features directory
-encoded_dir = 'data/encoded_features/'
+# Decoded fMRI directory
+fmri_dir = 'data/fmri_decoded/'
 # Trained models directory
 models_dir = 'data/trained_models/'
 # Image features mean and standard deviation directory
@@ -20,16 +21,24 @@ feat_dir = '../data/encoded_features/'
 # Examples directory
 examples_dir = 'examples/'
 
-# Class and id of image object to be reconstructed
-cls = 'heels'
-key = '644'
-key_id = cls + '*' + key
+# Subject
+subject = '1'
+# Type of imaginary case (im1/im2/im3)
+case = 'im1'
+# Type of imagined object
+obj = '1#jellyfish'
+# Trial number (1-5)
+trial = '1'
+key_id = case + '*' + obj + '*' + trial
 
 # Training configurations
 img_size = 224
 num_epochs = 1000
 print_iter = 100
 save_iter = 1000
+
+# Use BigGAN deep generator network as natural image prior
+use_dgn = False
 
 # GPU configurations
 use_gpu = False
@@ -51,11 +60,12 @@ norm_dict = pickle.load(open(mean_file, 'rb'))
 
 # Load the image features for every layer
 for layer in cnn_layers:
-	# Load encoded image features for layer
-    encoded_file = encoded_dir + 'vgg19_' + layer + '.p'
-    print('Loading encoded dictionary from {}...'.format(encoded_file))
-    encoded_dict = pickle.load(open(encoded_file, 'rb'))
-    encoded_feat = encoded_dict[key_id]
+    # Load decoded fMRI features for layer
+    fmri_file = fmri_dir + 'sub' + subject + '/vgg19_' + layer + '.p'
+    print('Loading fMRI dictionary from {}...'.format(fmri_file))
+    fmri_dict = pickle.load(open(fmri_file, 'rb'))
+    encoded_feat = fmri_dict[key_id]
+    encoded_feat = torch.from_numpy(encoded_feat)
     # Features of fc8 are not encoded, so ignore
     if 'fc8' in layer:
         original_feat = encoded_feat
@@ -79,12 +89,12 @@ for layer in cnn_layers:
             encoded_feat = encoded_feat.cuda(gpu_id)
         decoder.load_state_dict(torch.load(decoder_pth, map_location=lambda storage, loc:storage))
         decoder.eval()
-        original_feat = decoder.decode(encoded_feat.unsqueeze(0))[0].cpu()
+        original_feat = decoder.decode(encoded_feat.unsqueeze(0))[0]
         # Denormalize the features
         mean = norm_dict[layer]['mean']
         std = norm_dict[layer]['std']
-        original_feat = original_feat * std + mean
-
+        original_feat = (original_feat * std) + mean
+    
     print('Feature size: {}'.format(original_feat.shape))
     if use_gpu:
         original_feat = original_feat.cuda(gpu_id)
@@ -126,7 +136,7 @@ def get_total_loss(recon_img, output, target):
     # Parameter alpha, which is actually sixth norm
     alpha = 6
     # The multiplier, lambda alpha
-    lambda_alpha = 1e-7
+    lambda_alpha = 1e-6 if use_dgn else 1e-5
 
     # Total variation regularization parameters
     # Parameter beta, which is actually second norm
@@ -172,6 +182,32 @@ def reconstruct_image(img_size=224, test_case=1, num_epochs=200, print_iter=10, 
     # Decay learning rate by a factor of 0.1 every x epochs
     scheduler = lr_scheduler.StepLR(optimizer, step_size=200, gamma=0.1)
 
+    # Use deep generator network to get initial image
+    if use_dgn:
+        print('Loading deep generator network...')
+        # Load pre-trained model tokenizer (vocabulary)
+        dgn = BigGAN.from_pretrained('biggan-deep-256')
+        # Prepare an input
+        truncation = 0.4
+        class_vector = np.zeros((1, 1000), dtype='float32')
+        noise_vector = truncated_noise_sample(truncation=truncation, batch_size=1)
+        # All in tensors
+        class_vector = torch.from_numpy(class_vector)
+        noise_vector = torch.from_numpy(noise_vector)
+        if use_gpu:
+            class_vector = class_vector.cuda(gpu_id)
+            noise_vector = noise_vector.cuda(gpu_id)
+            dgn.cuda(gpu_id)
+        # Generate image
+        with torch.no_grad():
+            output = dgn(noise_vector, class_vector, truncation)
+            output = output.cpu()
+            output = nn.functional.interpolate(output, size=(img_size, img_size), mode='bilinear', align_corners=True)
+        if use_gpu:
+            recon_img = Variable(output.cuda(gpu_id), requires_grad=True)
+        else:
+            recon_img = Variable(output, requires_grad=True)
+
     # Training
     for epoch in range(num_epochs):
         scheduler.step()
@@ -187,7 +223,7 @@ def reconstruct_image(img_size=224, test_case=1, num_epochs=200, print_iter=10, 
         total_loss.backward()
         optimizer.step()
 
-        # Print out losses every x iterations
+        # Generate image every x iterations
         if (epoch+1) % print_iter == 0:
             print('Epoch %d:\tAlpha: %.6f\tTV: %.6f\tEuc: %.6f\tLoss: %.6f' % (epoch+1,
                 alpha_loss.data.cpu().numpy(), tv_loss.data.cpu().numpy(),
@@ -196,7 +232,7 @@ def reconstruct_image(img_size=224, test_case=1, num_epochs=200, print_iter=10, 
         # Save the  image every x iterations
         if (epoch+1) % save_iter == 0:
             img_sample = torch.squeeze(recon_img.cpu())
-            im_path = examples_dir + cls + '_' + key + '_direct.jpg'
+            im_path = examples_dir + cls + '_' + key + '_fmri.jpg'
             save_image(img_sample, im_path, normalize=True)
 
 
